@@ -1,7 +1,10 @@
-from flask import Flask, request, jsonify, current_app, Response
+from flask import Flask, request, jsonify, current_app, Response, g
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine, text
 from functools import wraps
+from datetime import datetime, timedelta
+from flask_cors import CORS
+
 import bcrypt
 import jwt
 
@@ -32,7 +35,7 @@ def login_required(f):
 
             user_id     = payload['user_id']
             g.user_id   = user_id
-            g.user      = get_user_info(user_id) if user_id else None
+            g.user      = get_user(user_id) if user_id else None
         else:
             return Response(status=401)
 
@@ -124,6 +127,9 @@ def get_timeline(user_id):
 
 def create_app(test_config = None):
     app = Flask(__name__)
+
+    CORS(app)
+
     with app.app_context():
         pass
 
@@ -204,7 +210,7 @@ def create_app(test_config = None):
         """), {'email' : email}).fetchone()
 
         if row and bcrypt.checkpw(password.encode('UTF-8'), row['hashed_password'].encode('UTF-8')):
-            user_id = row[id]
+            user_id = row['id']
             payload = {
                     'user_id' : user_id,
                     # 유효기간 하루
@@ -213,11 +219,21 @@ def create_app(test_config = None):
             token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], 'HS256')
 
             return jsonify({
-                'access_token'  :   token.decode('UTF-8')
+                'access_token'  :   token
+#                'access_token'  :   token.decode('UTF-8')
             })
         else:
             return '', 401
 
+    @app.route('/timeline', methods=['GET'])
+    @login_required
+    def user_timeline():
+        user_id = g.user_id
+
+        return jsonify({
+            'user_id'   :   user_id,
+            'timeline'  :   get_timeline(user_id)
+        })
 
 
     return app
